@@ -22,6 +22,7 @@
  */
 
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 using Gear.EmulationCore;
@@ -123,7 +124,31 @@ namespace Gear.PluginSupport
         /// 'force' an update, this is provided so you can pass a false for non-forced repaints).
         /// @note Source: <a href="http://forums.parallax.com/showthread.php/91084-GEAR-Propeller-Debugging-Environment?p=625629&viewfull=1#post625629">
         /// API GEAR described on GEAR original Post</a>
-        public virtual void Repaint(bool force) { }
+        public virtual void UpdateGui()
+        {
+            BackBufferDirty = true;
+            Refresh();
+        }
+
+        protected Bitmap BackBuffer;
+        protected bool BackBufferDirty = true;
+
+        /// @brief Ensures BackBuffer exists with a width and height no less than requested
+        protected void EnsureBackBuffer(int width, int height)
+        {
+            int desiredWidth = width;
+            int desiredHeight = height;
+
+            if (desiredWidth <= 0 || desiredHeight <= 0)
+                desiredWidth = desiredHeight = 1;
+
+            if (BackBuffer == null || BackBuffer.Width != desiredWidth
+                || BackBuffer.Height != desiredHeight)
+            {
+                BackBuffer = new Bitmap(desiredWidth, desiredHeight);
+                BackBufferDirty = true;
+            }
+        }
 
         /// @brief Notifies that this plugin must be notified on pin changes.
         /// This method is to isolate the access to the underline Chip.

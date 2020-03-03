@@ -38,12 +38,11 @@ namespace Gear.GUI
         private TreeView objectView;
         private Panel hexView;
         private ToolStrip toolStrip1;
-        private ToolStripButton analizeButton;
+        private ToolStripButton analyzeButton;
         private VScrollBar scrollPosition;
-        private Brush[] Colorize;
         private Splitter splitter1;
-        //private System.ComponentModel.IContainer components;
-        private Bitmap BackBuffer;
+        private Brush[] colorBrushes;
+        private byte[] colorMap = new byte[0x10000];
 
         public override string Title
         {
@@ -69,17 +68,36 @@ namespace Gear.GUI
             }
         }
 
+        enum MemoryType
+        {
+            Unknown,
+            Config,
+
+        }
+
         public SpinView(PropellerCPU chip) : base(chip)
         {
             MonoSpace = new Font(FontFamily.GenericMonospace, 8);
             if (MonoSpace == null)
                 MonoSpace = Font;
             InitializeComponent();
-            Colorize = new Brush[0x10000];
 
-            for (int i = 0; i < Colorize.Length; i++)
+            colorBrushes = new Brush[]
             {
-                Colorize[i] = Brushes.Gray;
+                Brushes.Gray,
+                Brushes.White,
+                Brushes.LightYellow,
+                Brushes.LightGray,
+                Brushes.LightBlue,
+                Brushes.LightPink,
+                Brushes.LavenderBlush,
+                Brushes.LightGreen,
+                Brushes.Yellow,
+            };
+
+            for (int i = 0; i < colorMap.Length; i++)
+            {
+                colorMap[i] = 0;
             }
         }
 
@@ -114,13 +132,13 @@ namespace Gear.GUI
             node.Tag = (int)14;
 
             for (i = 0; i < 16; i++)
-                Colorize[i] = Brushes.White;
+                colorMap[i] = 1;
 
             for (i = Chip.DirectReadWord(0x8); i < Chip.DirectReadWord(0xA); i++)
-                Colorize[i] = Brushes.LightYellow;
+                colorMap[i] = 2;
 
             for (; i < 0x8000; i++)
-                Colorize[i] = Brushes.LightGray;
+                colorMap[i] = 3;
 
             ColorObject(Chip.DirectReadWord(0x6), Chip.DirectReadWord(0x8), root);
         }
@@ -133,18 +151,18 @@ namespace Gear.GUI
             root.Tag = (int)objFrame;
 
             root.Nodes.Add(String.Format("Variable Space {0:X4}", varFrame)).Tag = (int)varFrame;
-            Colorize[varFrame] = Brushes.LightBlue;
+            colorMap[varFrame] = 4;
 
             ushort size = Chip.DirectReadWord(objFrame);
             byte longs = Chip.DirectReadByte(objFrame + 2);
             byte objects = Chip.DirectReadByte(objFrame + 3);
 
             for (i = 0; i < longs * 4; i++)
-                Colorize[i + objFrame] = Brushes.LightPink;
+                colorMap[i + objFrame] = 5;
             for (; i < (longs + objects) * 4; i++)
-                Colorize[i + objFrame] = Brushes.LavenderBlush;
+                colorMap[i + objFrame] = 6;
             for (; i < size; i++)
-                Colorize[i + objFrame] = Brushes.LightGreen;
+                colorMap[i + objFrame] = 7;
 
             addrnext = Chip.DirectReadWord(1 * 4 + objFrame) + objFrame;
             for (i = 1; i < longs; i++)
@@ -154,7 +172,7 @@ namespace Gear.GUI
                 if (i == longs - 1)
                 {
                     addrnext = addr + 1;
-                    while (Colorize[addrnext] == Brushes.LightGreen)
+                    while (colorMap[addrnext] == 7)
                         addrnext++;
                 }
                 ColorFunction(addr, addrnext, root);
@@ -170,45 +188,7 @@ namespace Gear.GUI
             root = root.Nodes.Add(String.Format("Function {0:X} ({1:d})", functFrame, functFrameEnd - functFrame));
             root.Tag = (int)functFrame;
 
-            Colorize[functFrame] = Brushes.Yellow;
-        }
-
-        public override void Repaint(bool force)
-        {
-            if (Chip == null)
-                return;
-
-            Graphics g = Graphics.FromImage((Image)BackBuffer);
-            ASCIIEncoding ascii = new ASCIIEncoding();
-
-            g.Clear(SystemColors.Control);
-
-            Size s = TextRenderer.MeasureText("00", MonoSpace);
-            Size a = TextRenderer.MeasureText("0000:", MonoSpace);
-
-            for (int y = scrollPosition.Value, dy = 0; y < 0x10000 && dy < hexView.ClientRectangle.Height; dy += s.Height)
-            {
-                // Draw the address
-                g.FillRectangle(Brushes.White, new Rectangle(0, dy, a.Width, s.Height));
-                g.DrawString(String.Format("{0:X4}:", y), MonoSpace, SystemBrushes.ControlText, 0, dy);
-                // Draw the line of data
-                for (int x = 0, dx = a.Width; y < 0x10000 && x < 16; x++, dx += s.Width, y++)
-                {
-                    byte data = Chip.DirectReadByte((uint)y);
-                    g.FillRectangle(Colorize[y], new Rectangle(dx, dy, s.Width, s.Height));
-
-                    // if (data > 32 && data < 127)
-                    // {
-                    //    g.DrawString(ascii.GetString(new byte[] { data }), MonoSpace, SystemBrushes.ControlText, dx, dy);
-                    // }
-                    // else
-                    // {
-                        g.DrawString(String.Format("{0:X2}", data), MonoSpace, SystemBrushes.ControlText, dx, dy);
-                    // }
-                }
-            }
-
-            hexView.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
+            colorMap[functFrame] = 8;
         }
 
         #region FormCode
@@ -219,7 +199,7 @@ namespace Gear.GUI
             this.objectView = new System.Windows.Forms.TreeView();
             this.hexView = new System.Windows.Forms.Panel();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
-            this.analizeButton = new System.Windows.Forms.ToolStripButton();
+            this.analyzeButton = new System.Windows.Forms.ToolStripButton();
             this.scrollPosition = new System.Windows.Forms.VScrollBar();
             this.splitter1 = new System.Windows.Forms.Splitter();
             this.toolStrip1.SuspendLayout();
@@ -249,22 +229,22 @@ namespace Gear.GUI
             // toolStrip1
             //
             this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.analizeButton});
+            this.analyzeButton});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
             this.toolStrip1.Size = new System.Drawing.Size(625, 25);
             this.toolStrip1.TabIndex = 0;
             this.toolStrip1.Text = "toolStrip1";
             //
-            // analizeButton
+            // analyzeButton
             //
-            this.analizeButton.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
-            this.analizeButton.Image = ((System.Drawing.Image)(resources.GetObject("analizeButton.Image")));
-            this.analizeButton.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.analizeButton.Name = "analizeButton";
-            this.analizeButton.Size = new System.Drawing.Size(57, 22);
-            this.analizeButton.Text = "Reanalize";
-            this.analizeButton.Click += new System.EventHandler(this.analizeButton_Click);
+            this.analyzeButton.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.analyzeButton.Image = ((System.Drawing.Image)(resources.GetObject("analyzeButton.Image")));
+            this.analyzeButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.analyzeButton.Name = "analyzeButton";
+            this.analyzeButton.Size = new System.Drawing.Size(57, 22);
+            this.analyzeButton.Text = "Reanalyze";
+            this.analyzeButton.Click += new System.EventHandler(this.analyzeButton_Click);
             //
             // scrollPosition
             //
@@ -306,6 +286,45 @@ namespace Gear.GUI
 
         private void OnPaint(object sender, PaintEventArgs e)
         {
+            EnsureBackBuffer(hexView.Width, hexView.Height);
+
+            if (BackBufferDirty)
+            {
+                Graphics g = Graphics.FromImage((Image)BackBuffer);
+                ASCIIEncoding ascii = new ASCIIEncoding();
+
+                g.Clear(SystemColors.Control);
+
+                Size s = TextRenderer.MeasureText("00", MonoSpace);
+                Size a = TextRenderer.MeasureText("0000:", MonoSpace);
+
+                for (int y = scrollPosition.Value, dy = 0; y < 0x10000 && dy < hexView.ClientRectangle.Height; dy += s.Height)
+                {
+                    // Draw the address
+                    g.FillRectangle(Brushes.White, new Rectangle(0, dy, a.Width, s.Height));
+                    g.DrawString(String.Format("{0:X4}:", y), MonoSpace, SystemBrushes.ControlText, 0, dy);
+                    // Draw the line of data
+                    for (int x = 0, dx = a.Width; y < 0x10000 && x < 16; x++, dx += s.Width, y++)
+                    {
+                        byte data = Chip?.DirectReadByte((uint)y) ?? 0x00;
+                        g.FillRectangle(colorBrushes[colorMap[y]], new Rectangle(dx, dy, s.Width, s.Height));
+
+                        // if (data > 32 && data < 127)
+                        // {
+                        //    g.DrawString(ascii.GetString(new byte[] { data }), MonoSpace, SystemBrushes.ControlText, dx, dy);
+                        // }
+                        // else
+                        // {
+                        g.DrawString(String.Format("{0:X2}", data), MonoSpace, SystemBrushes.ControlText, dx, dy);
+                        // }
+                    }
+                }
+
+                hexView.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
+
+                BackBufferDirty = false;
+            }
+
             e.Graphics.DrawImageUnscaled(BackBuffer, 0, 0);
         }
 
@@ -316,36 +335,25 @@ namespace Gear.GUI
             if (o != null)
             {
                 scrollPosition.Value = (int)o;
-                Repaint(false);
+                UpdateGui();
             }
         }
 
-        private void analizeButton_Click(object sender, EventArgs e)
+        private void analyzeButton_Click(object sender, EventArgs e)
         {
             ColorCode();
             objectView.ExpandAll();
-            Repaint(false);
+            UpdateGui();
         }
 
         private void OnScroll(object sender, ScrollEventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         private void OnSize(object sender, EventArgs e)
         {
-            if (hexView.Width > 0 && hexView.Height > 0)
-            {
-                BackBuffer = new Bitmap(
-                    hexView.Width,
-                    hexView.Height
-                );
-            }
-            else
-            {
-                BackBuffer = new Bitmap(1, 1);
-            }
-            Repaint(false);
+            UpdateGui();
         }
 
         private void hexView_MouseClick(object sender, MouseEventArgs e)

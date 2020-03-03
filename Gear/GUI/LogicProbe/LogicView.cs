@@ -39,8 +39,6 @@ namespace Gear.GUI.LogicProbe
         private double TimeScale;
         private double Marker;
 
-        private Bitmap BackBuffer;
-
         public override string Title
         {
             get
@@ -138,110 +136,102 @@ namespace Gear.GUI.LogicProbe
             }
         }
 
-        /// @todo document Gear.GUI.LogicProbe.Repaint()
-        ///
-        public override void Repaint(bool tick)
-        {
-            if (Chip == null)
-                return;
-
-            viewOffset.Maximum = Pins.Count - 1;
-
-            Graphics g = Graphics.FromImage((Image)BackBuffer);
-
-            g.FillRectangle(SystemBrushes.Control, 0, 0, 64, waveView.ClientSize.Height);
-            g.FillRectangle(Brushes.Black, 64, 0, waveView.ClientSize.Width, waveView.ClientSize.Height);
-
-            if (Pins.Count <= 0)
-                return;
-
-            if (viewOffset.Value < 0)
-                viewOffset.Value = 0;
-
-            double maxTime;
-            double minTime;
-
-            if (timeAdjustBar.Value == timeAdjustBar.Maximum)
-            {
-                maxTime = Chip.EmulatorTime;
-                minTime = maxTime - TimeScale;
-            }
-            else
-            {
-                double minimum = Pins[0].MinTime;
-
-                for (int i = 1; i < Pins.Count; i++)
-                    if (minimum < Pins[i].MinTime)
-                        minimum = Pins[i].MinTime;
-
-                double range = (Chip.EmulatorTime - minimum) - TimeScale;  // Only allow it to scale to the minimum time
-
-                if (range > 0)
-                {
-                    minTime = range * (timeAdjustBar.Value + timeAdjustBar.LargeChange) /
-                              timeAdjustBar.Maximum + minimum;
-                    maxTime = minTime + TimeScale;
-                }
-                else
-                {
-                    maxTime = Chip.EmulatorTime;
-                    minTime = maxTime - TimeScale;
-                }
-            }
-
-            // -------------------------------
-
-            // Position of the first marker
-            double markAt = minTime / Marker;
-            // Use the fractional portion as a base offset
-            markAt = (Math.Ceiling(markAt) - markAt) * Marker / TimeScale;
-            // Convert to client space
-            markAt = markAt * (waveView.ClientSize.Width - 64) + 64;
-
-            while (markAt < ClientSize.Width)
-            {
-                g.DrawLine(Pens.Gray, (float)markAt, 0, (float)markAt, waveView.ClientSize.Height);
-                markAt += (Marker / TimeScale) * (waveView.ClientSize.Width - 64);
-            }
-
-            for (int i = viewOffset.Value, p = 0;
-                p < waveView.Height && i < Pins.Count; i++)
-            {
-                g.DrawString(Pins[i].Name, MonoFont, Brushes.Black, 8, p);
-                p += Pins[i].Draw(g, p,
-                    64, waveView.ClientSize.Width - 64,
-                    minTime, TimeScale);
-                g.DrawLine(Pens.Gray, 64, p, waveView.ClientSize.Width, p);
-            }
-
-            waveView.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
-        }
-
         /// @todo document Gear.GUI.LogicProbe.OnSized()
         ///
         private void OnSized(object sender, EventArgs e)
         {
-            if (waveView.Width > 0 && waveView.Height > 0)
-                BackBuffer = new Bitmap(
-                    waveView.Width,
-                    waveView.Height);
-            else
-                BackBuffer = new Bitmap(1, 1);
-
-            Repaint(true);
+            UpdateGui();
         }
 
         /// @todo document Gear.GUI.LogicProbe.ScrollChanged()
         ///
         private void ScrollChanged(object sender, ScrollEventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         /// @todo document Gear.GUI.LogicProbe.WaveView_Paint()
         ///
         private void WaveView_Paint(object sender, PaintEventArgs e)
         {
+            EnsureBackBuffer(waveView.Width, waveView.Height);
+
+            if(BackBufferDirty)
+            {
+                viewOffset.Maximum = Pins.Count - 1;
+
+                Graphics g = Graphics.FromImage((Image)BackBuffer);
+
+                g.FillRectangle(SystemBrushes.Control, 0, 0, 64, waveView.ClientSize.Height);
+                g.FillRectangle(Brushes.Black, 64, 0, waveView.ClientSize.Width, waveView.ClientSize.Height);
+
+                if (Pins.Count <= 0)
+                    return;
+
+                if (viewOffset.Value < 0)
+                    viewOffset.Value = 0;
+
+                double maxTime;
+                double minTime;
+
+                if(Chip == null)
+                {
+                    maxTime = TimeScale;
+                    minTime = 0;
+                }
+                else if (timeAdjustBar.Value == timeAdjustBar.Maximum)
+                {
+                    maxTime = Chip.EmulatorTime;
+                    minTime = maxTime - TimeScale;
+                }
+                else
+                {
+                    double minimum = Pins[0].MinTime;
+
+                    for (int i = 1; i < Pins.Count; i++)
+                        if (minimum < Pins[i].MinTime)
+                            minimum = Pins[i].MinTime;
+
+                    double range = (Chip.EmulatorTime - minimum) - TimeScale;  // Only allow it to scale to the minimum time
+
+                    if (range > 0)
+                    {
+                        minTime = range * (timeAdjustBar.Value + timeAdjustBar.LargeChange) /
+                                  timeAdjustBar.Maximum + minimum;
+                        maxTime = minTime + TimeScale;
+                    }
+                    else
+                    {
+                        maxTime = Chip.EmulatorTime;
+                        minTime = maxTime - TimeScale;
+                    }
+                }
+
+                // -------------------------------
+
+                // Position of the first marker
+                double markAt = minTime / Marker;
+                // Use the fractional portion as a base offset
+                markAt = (Math.Ceiling(markAt) - markAt) * Marker / TimeScale;
+                // Convert to client space
+                markAt = markAt * (waveView.ClientSize.Width - 64) + 64;
+
+                while (markAt < ClientSize.Width)
+                {
+                    g.DrawLine(Pens.Gray, (float)markAt, 0, (float)markAt, waveView.ClientSize.Height);
+                    markAt += (Marker / TimeScale) * (waveView.ClientSize.Width - 64);
+                }
+
+                for (int i = viewOffset.Value, p = 0;
+                    p < waveView.Height && i < Pins.Count; i++)
+                {
+                    g.DrawString(Pins[i].Name, MonoFont, Brushes.Black, 8, p);
+                    p += Pins[i].Draw(g, p,
+                        64, waveView.ClientSize.Width - 64,
+                        minTime, TimeScale);
+                    g.DrawLine(Pens.Gray, 64, p, waveView.ClientSize.Width, p);
+                }
+            }
             e.Graphics.DrawImageUnscaled(BackBuffer, 0, 0);
         }
 
@@ -266,14 +256,14 @@ namespace Gear.GUI.LogicProbe
                 tickMarkBox.Text = Marker.ToString();
             }
 
-            Repaint(true);
+            UpdateGui();
         }
 
         /// @todo document Gear.GUI.LogicProbe.TimeChanged()
         ///
         private void TimeChanged(object sender, ScrollEventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         /// @todo document Gear.GUI.LogicProbe.OnClick()
@@ -296,7 +286,7 @@ namespace Gear.GUI.LogicProbe
                     continue;
 
                 Pins[i].Click();
-                Repaint(true);
+                UpdateGui();
                 return;
             }
         }
@@ -321,7 +311,7 @@ namespace Gear.GUI.LogicProbe
                     continue;
 
                 Pins.RemoveAt(i);
-                Repaint(true);
+                UpdateGui();
                 return;
             }
 
@@ -382,7 +372,7 @@ namespace Gear.GUI.LogicProbe
                     "Pin value Problem", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
             }
 
-            Repaint(true);
+            UpdateGui();
         }
 
         /// @todo document Gear.GUI.LogicProbe.analogButton_Click()
@@ -447,7 +437,7 @@ namespace Gear.GUI.LogicProbe
 
             pinsTextBox.Text = string.Empty;
             Pins.Add(new LogicAnalog(pins.ToArray()));
-            Repaint(true);
+            UpdateGui();
         }
 
     }

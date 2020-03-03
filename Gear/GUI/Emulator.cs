@@ -94,7 +94,7 @@ namespace Gear.GUI
         public void BreakPoint()
         {
             runTimer.Stop();
-            RepaintViews();
+            UpdateViewGuis();
         }
 
         /// @brief Include a plugin to a propeller chip instance.
@@ -153,7 +153,7 @@ namespace Gear.GUI
                     runTimer.Stop();
                     break;
                 }
-            RepaintViews();
+            UpdateViewGuis();
         }
 
         /// @brief Unfloat the tab object.
@@ -178,7 +178,7 @@ namespace Gear.GUI
             {
                 Chip.Initialize(File.ReadAllBytes(FileName));
                 LastFileName = FileName;
-                RepaintViews();
+                UpdateViewGuis();
                 return true;
             }
             catch (IOException ioe)
@@ -328,7 +328,7 @@ namespace Gear.GUI
         }
 
         /// @brief Repaint the Views, including float windows.
-        private void RepaintViews()
+        private void UpdateViewGuis()
         {
             foreach (Control s in FloatControls)
                 s.Refresh();
@@ -336,11 +336,11 @@ namespace Gear.GUI
             Control c = pinnedPanel.GetNextControl(null, true);
 
             if (c != null)
-                ((PluginBase)c).Repaint(true);
+                ((PluginBase)c).UpdateGui();
 
             if ( (documentsTab.SelectedTab != null) && 
                  ((c = documentsTab.SelectedTab.GetNextControl(null, true)) != null) )
-                ((PluginBase)c).Repaint(true);
+                ((PluginBase)c).UpdateGui();
 
             hubView.DataChanged();
         }
@@ -351,7 +351,7 @@ namespace Gear.GUI
         private void resetEmulator_Click(object sender, EventArgs e)
         {
             Chip.Reset();
-            RepaintViews();
+            UpdateViewGuis();
         }
 
         /// @brief Run only one instruction of the active cog, stopping after executed.
@@ -360,7 +360,7 @@ namespace Gear.GUI
         private void stepEmulator_Click(object sender, EventArgs e)
         {
             Chip.Step();
-            RepaintViews();
+            UpdateViewGuis();
         }
 
         /// @brief Close the plugin window and terminate the plugin instance.
@@ -470,7 +470,7 @@ namespace Gear.GUI
         private void stopEmulator_Click(object sender, EventArgs e)
         {
             runTimer.Stop();
-            RepaintViews(); //added the repaint, to refresh the views
+            UpdateViewGuis(); //added the repaint, to refresh the views
         }
 
         /// @brief Event to run one instruction in emulator.
@@ -491,7 +491,7 @@ namespace Gear.GUI
                 }
             }
 
-            RepaintViews();
+            UpdateViewGuis();
         }
 
         /// @brief Try to open a plugin, compiling it and attaching to the active 

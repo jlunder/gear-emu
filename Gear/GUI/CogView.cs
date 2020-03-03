@@ -41,7 +41,6 @@ namespace Gear.GUI
         private int HostID;
         private Font MonoFont;
         private Font MonoFontBold;
-        private Bitmap BackBuffer;
         private uint[] InterpAddress;
         private int  StackMargin = 180;
         private uint LastLine    = 0;       //!< @brief Last line in NativeCog view.
@@ -104,16 +103,11 @@ namespace Gear.GUI
             StringY += (uint)MonoFont.Height;
         }
 
-        private void Repaint(bool tick, NativeCog host)
+        private void PaintBackBufferNative(NativeCog host)
         {
             Graphics g = Graphics.FromImage((Image)BackBuffer);
             g.Clear(SystemColors.Control);
             Brush brush;
-
-            OpcodeSize.Visible = false;
-            DisplayUnits.Visible = false;
-            zeroFlagLabel.Text = "Zero: " + (host.ZeroFlag ? "True" : "False");
-            carryFlagLabel.Text = "Carry: " + (host.CarryFlag ? "True" : "False");
 
             String display;
             uint topLine, bottomLine;
@@ -165,7 +159,7 @@ namespace Gear.GUI
             }
         }
 
-        private void Repaint(bool tick, InterpretedCog host)
+        private void PaintBackBufferInterpreted(InterpretedCog host)
         {
             Graphics g = Graphics.FromImage((Image)BackBuffer);
             Brush brush;
@@ -176,11 +170,6 @@ namespace Gear.GUI
             uint topLine, bottomLine;
             topLine = 5;
             bottomLine = (uint)((ClientRectangle.Height / MonoFont.Height) - 5);
-
-            zeroFlagLabel.Text = "";
-            carryFlagLabel.Text = "";
-            OpcodeSize.Visible = true;
-            DisplayUnits.Visible = true;
 
             if (memoryViewButton.Checked)
             {
@@ -282,14 +271,11 @@ namespace Gear.GUI
 
         /// @brief Repaint the Cog state and data.
         /// @param force 
-        public override void Repaint(bool force)
+        public override void UpdateGui()
         {
-            if (Chip == null)
-                return;
+            Cog host = Chip?.GetCog(HostID);
 
-            Cog Host = Chip.GetCog(HostID);
-
-            if (Host == null)
+            if (host == null)
             {
                 processorStateLabel.Text = "CPU State: Cog is stopped.";
                 programCounterLabel.Text = "";
@@ -300,8 +286,8 @@ namespace Gear.GUI
 
             positionScroll.Minimum = 0;
 
-            if (Host is InterpretedCog) positionScroll.Maximum = 0xFFFF;
-            else if (Host is NativeCog) positionScroll.Maximum = 0x200;
+            if (host is InterpretedCog) positionScroll.Maximum = 0xFFFF;
+            else if (host is NativeCog) positionScroll.Maximum = 0x200;
 
             positionScroll.LargeChange = 10;
             positionScroll.SmallChange = 1;
@@ -314,52 +300,71 @@ namespace Gear.GUI
                 uint topLine, bottomLine;
                 topLine = 5;
                 bottomLine = (uint)((ClientRectangle.Height / MonoFont.Height) - 5);
-                if (Host is NativeCog)
+                if (host is NativeCog)
                 {
-                    if (Host.ProgramCursor < topLine)
+                    if (host.ProgramCursor < topLine)
                         positionScroll.Value = 0;
-                    else if (Host.ProgramCursor - positionScroll.Value >= bottomLine - 1)
-                        positionScroll.Value = (int)Host.ProgramCursor - (int)topLine;
-                    else if (Host.ProgramCursor - positionScroll.Value < topLine)
-                        positionScroll.Value = (int)Host.ProgramCursor - (int)topLine;
+                    else if (host.ProgramCursor - positionScroll.Value >= bottomLine - 1)
+                        positionScroll.Value = (int)host.ProgramCursor - (int)topLine;
+                    else if (host.ProgramCursor - positionScroll.Value < topLine)
+                        positionScroll.Value = (int)host.ProgramCursor - (int)topLine;
                 }
                 else
-                    positionScroll.Value = (int)Host.ProgramCursor;
+                    positionScroll.Value = (int)host.ProgramCursor;
             }
 
-            if (Host is NativeCog) Repaint(force, (NativeCog)Host);
-            else if (Host is InterpretedCog) Repaint(force, (InterpretedCog)Host);
+            if (host is NativeCog)
+            {
+                NativeCog nativeHost = (NativeCog)host;
 
-            programCounterLabel.Text = "PC: " + String.Format("{0:X8}", Host.ProgramCursor);
-            processorStateLabel.Text = "CPU State: " + Host.CogState;
+                OpcodeSize.Visible = false;
+                DisplayUnits.Visible = false;
+                zeroFlagLabel.Text = "Zero: " + (nativeHost.ZeroFlag ? "True" : "False");
+                carryFlagLabel.Text = "Carry: " + (nativeHost.CarryFlag ? "True" : "False");
+            }
+            else if (host is InterpretedCog)
+            {
+                zeroFlagLabel.Text = "";
+                carryFlagLabel.Text = "";
+                OpcodeSize.Visible = true;
+                DisplayUnits.Visible = true;
+            }
 
-            assemblyPanel.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
+            programCounterLabel.Text = "PC: " + String.Format("{0:X8}", host.ProgramCursor);
+            processorStateLabel.Text = "CPU State: " + host.CogState;
+
+            base.UpdateGui();
+        }
+
+        private void PaintBackBuffer()
+        {
+            EnsureBackBuffer(assemblyPanel.Width, assemblyPanel.Height);
+
+            if (BackBufferDirty)
+            {
+                Cog host = Chip?.GetCog(HostID);
+                if (host is NativeCog) PaintBackBufferNative((NativeCog)host);
+                else if (host is InterpretedCog) PaintBackBufferInterpreted((InterpretedCog)host);
+
+                BackBufferDirty = false;
+            }
         }
 
         private void UpdateOnScroll(object sender, ScrollEventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         private void AssemblyView_Paint(object sender, PaintEventArgs e)
         {
-            assemblyPanel.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
-        }
+            PaintBackBuffer();
 
-        private void AsmSized(object sender, EventArgs e)
-        {
-            if (assemblyPanel.Width > 0 && assemblyPanel.Height > 0)
-                BackBuffer = new Bitmap(
-                    assemblyPanel.Width,
-                    assemblyPanel.Height);
-            else
-                BackBuffer = new Bitmap(1, 1);
-            Repaint(false);
+            assemblyPanel.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
         }
 
         private void memoryViewButton_Click(object sender, EventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         private void assemblyPanel_MouseDown(object sender, MouseEventArgs e)
@@ -380,13 +385,13 @@ namespace Gear.GUI
                 if (bp == Host.BreakPoint) Host.BreakPoint = -1;
                 else Host.BreakPoint = bp;
                 //Show the user what happened
-                Repaint(false);
+                UpdateGui();
             }
         }
 
         private void followPCButton_Click(object sender, EventArgs e)
         {
-            Repaint(false);
+            UpdateGui();
         }
 
         private void hexadecimalUnits_Click(object sender, EventArgs e)
@@ -394,7 +399,7 @@ namespace Gear.GUI
             displayAsHexadecimal = true;
             hexadecimalUnits.Checked = true;
             decimalUnits.Checked = false;
-            Repaint(false);
+            UpdateGui();
         }
 
         private void decimalUnits_Click(object sender, EventArgs e)
@@ -402,7 +407,7 @@ namespace Gear.GUI
             displayAsHexadecimal = false;
             hexadecimalUnits.Checked = false;
             decimalUnits.Checked = true;
-            Repaint(false);
+            UpdateGui();
         }
 
         private void longOpcodes_Click(object sender, EventArgs e)
@@ -410,7 +415,7 @@ namespace Gear.GUI
             useShortOpcodes = false;
             longOpcodes.Checked = true;
             shortOpcodes.Checked = false;
-            Repaint(false);
+            UpdateGui();
         }
 
         private void shortOpcodes_Click(object sender, EventArgs e)
@@ -418,7 +423,7 @@ namespace Gear.GUI
             useShortOpcodes = true;
             longOpcodes.Checked = false;
             shortOpcodes.Checked = true;
-            Repaint(false);
+            UpdateGui();
         }
 
         private void assemblyPanel_MouseClick(object sender, MouseEventArgs e)

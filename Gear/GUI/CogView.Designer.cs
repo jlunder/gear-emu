@@ -115,7 +115,6 @@ namespace Gear.GUI
             this.assemblyPanel.MouseClick += new System.Windows.Forms.MouseEventHandler(this.assemblyPanel_MouseClick);
             this.assemblyPanel.Paint += new System.Windows.Forms.PaintEventHandler(this.AssemblyView_Paint);
             this.assemblyPanel.MouseHover += new System.EventHandler(this.assemblyPanel_MouseHover);
-            this.assemblyPanel.SizeChanged += new System.EventHandler(this.AsmSized);
             //
             // positionScroll
             //
