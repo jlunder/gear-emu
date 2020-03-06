@@ -114,7 +114,7 @@ namespace Gear.EmulationCore
 
             this[(int)Assembly.RegisterAddress.COGID] = Hub.CogID(this);
 
-            InitFrame &= 0xFFFF;
+            InitFrame &= PropellerCPU.TOTAL_MEMORY - 1;
 
             ObjectFrame = Hub.DirectReadWord(InitFrame - 8);
             VariableFrame = Hub.DirectReadWord(InitFrame - 6);

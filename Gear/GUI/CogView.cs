@@ -103,9 +103,8 @@ namespace Gear.GUI
             StringY += (uint)MonoFont.Height;
         }
 
-        private void PaintBackBufferNative(NativeCog host)
+        private void PaintNative(Graphics g, NativeCog host)
         {
-            Graphics g = Graphics.FromImage((Image)BackBuffer);
             g.Clear(SystemColors.Control);
             Brush brush;
 
@@ -159,9 +158,8 @@ namespace Gear.GUI
             }
         }
 
-        private void PaintBackBufferInterpreted(InterpretedCog host)
+        private void PaintInterpreted(Graphics g, InterpretedCog host)
         {
-            Graphics g = Graphics.FromImage((Image)BackBuffer);
             Brush brush;
 
             g.Clear(SystemColors.Control);
@@ -177,7 +175,7 @@ namespace Gear.GUI
                     y < ClientRectangle.Height;
                     y += (uint)MonoFont.Height, i++)
                 {
-                    if ((i > 0xFFFF) || (i < 0))
+                    if ((i >= PropellerCPU.TOTAL_MEMORY) || (i < 0))
                         continue;
 
                     uint mem = host[(int)i];
@@ -206,24 +204,24 @@ namespace Gear.GUI
             {
                 uint y = 0;
 
-                for (uint i = (uint)positionScroll.Value, line = 1; y < ClientRectangle.Height; y += (uint)MonoFont.Height, line++)
+                for (int i = positionScroll.Value, line = 1; y < ClientRectangle.Height; y += (uint)MonoFont.Height, line++)
                 {
-                    if (i > 0xFFFF)
+                    if (i >= PropellerCPU.TOTAL_MEMORY)
                         continue;
 
-                    uint start = i;
+                    int start = i;
 
                     Propeller.MemoryManager mem = new Propeller.MemoryManager(Chip, i);
                     string inst = InstructionDisassembler.InterpreterText(mem, displayAsHexadecimal, useShortOpcodes);
                     i = mem.Address;
                     display = String.Format("{0:X4}: ", start);
-                    InterpAddress[line] = start;
+                    InterpAddress[line] = (uint)start;
 
-                    for (uint q = start; q < start + 4; q++)
+                    for (int q = start; q < start + 4; q++)
                     {
                         if (q < i)
                         {
-                            byte b = Chip.DirectReadByte(q);
+                            byte b = Chip.DirectReadByte((uint)q);
                             display += String.Format(" {0:X2}", b);
                         }
                         else
@@ -273,6 +271,8 @@ namespace Gear.GUI
         /// @param force 
         public override void UpdateGui()
         {
+            assemblyPanel.Invalidate();
+
             Cog host = Chip?.GetCog(HostID);
 
             if (host == null)
@@ -286,7 +286,7 @@ namespace Gear.GUI
 
             positionScroll.Minimum = 0;
 
-            if (host is InterpretedCog) positionScroll.Maximum = 0xFFFF;
+            if (host is InterpretedCog) positionScroll.Maximum = PropellerCPU.TOTAL_MEMORY - 1;
             else if (host is NativeCog) positionScroll.Maximum = 0x200;
 
             positionScroll.LargeChange = 10;
@@ -332,22 +332,6 @@ namespace Gear.GUI
 
             programCounterLabel.Text = "PC: " + String.Format("{0:X8}", host.ProgramCursor);
             processorStateLabel.Text = "CPU State: " + host.CogState;
-
-            base.UpdateGui();
-        }
-
-        private void PaintBackBuffer()
-        {
-            EnsureBackBuffer(assemblyPanel.Width, assemblyPanel.Height);
-
-            if (BackBufferDirty)
-            {
-                Cog host = Chip?.GetCog(HostID);
-                if (host is NativeCog) PaintBackBufferNative((NativeCog)host);
-                else if (host is InterpretedCog) PaintBackBufferInterpreted((InterpretedCog)host);
-
-                BackBufferDirty = false;
-            }
         }
 
         private void UpdateOnScroll(object sender, ScrollEventArgs e)
@@ -357,9 +341,12 @@ namespace Gear.GUI
 
         private void AssemblyView_Paint(object sender, PaintEventArgs e)
         {
-            PaintBackBuffer();
+            Cog host = Chip?.GetCog(HostID);
 
-            assemblyPanel.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
+            if (host is NativeCog)
+                PaintNative(e.Graphics, (NativeCog)host);
+            else if (host is InterpretedCog)
+                PaintInterpreted(e.Graphics, (InterpretedCog)host);
         }
 
         private void memoryViewButton_Click(object sender, EventArgs e)

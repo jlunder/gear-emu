@@ -53,6 +53,8 @@ namespace Gear.GUI
 
         public RingMeter()
         {
+            DoubleBuffered = true;
+
             InitializeComponent();
         }
 
@@ -60,7 +62,7 @@ namespace Gear.GUI
         {
             this.Height = this.Width;
             base.OnSizeChanged(e);
-            this.Refresh();
+            this.Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)

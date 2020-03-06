@@ -211,6 +211,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="GUI\DoubleBufferedPanel.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="GUI\CollapsibleSplitter.bmp" />

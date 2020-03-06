@@ -38,7 +38,6 @@ namespace Gear.GUI.LogicProbe
                 components.Dispose();
             }
             this.MonoFont.Dispose();
-            this.BackBuffer.Dispose();
             base.Dispose(disposing);
         }
 
@@ -63,7 +62,7 @@ namespace Gear.GUI.LogicProbe
             this.analogButton = new System.Windows.Forms.ToolStripButton();
             this.digitalButton = new System.Windows.Forms.ToolStripButton();
             this.viewOffset = new System.Windows.Forms.VScrollBar();
-            this.waveView = new System.Windows.Forms.Panel();
+            this.waveView = new DoubleBufferedPanel();
             this.timeAdjustBar = new System.Windows.Forms.HScrollBar();
             toolStripLabel1 = new System.Windows.Forms.ToolStripLabel();
             toolStripLabel2 = new System.Windows.Forms.ToolStripLabel();
@@ -214,7 +213,7 @@ namespace Gear.GUI.LogicProbe
 
         private System.Windows.Forms.ToolStrip toolStrip1;
         private System.Windows.Forms.VScrollBar viewOffset;
-        private System.Windows.Forms.Panel waveView;
+        private DoubleBufferedPanel waveView;
         private System.Windows.Forms.ToolStripTextBox timeFrameBox;
         private System.Windows.Forms.ToolStripTextBox tickMarkBox;
         private System.Windows.Forms.HScrollBar timeAdjustBar;

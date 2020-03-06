@@ -98,6 +98,11 @@ namespace Gear.GUI.LogicProbe
             }
         }
 
+        public override void UpdateGui()
+        {
+            waveView.Invalidate();
+        }
+
         /// @todo document Gear.GUI.LogicProbe.PresentChip()
         /// 
         public override void PresentChip()
@@ -154,85 +159,79 @@ namespace Gear.GUI.LogicProbe
         ///
         private void WaveView_Paint(object sender, PaintEventArgs e)
         {
-            EnsureBackBuffer(waveView.Width, waveView.Height);
+            viewOffset.Maximum = Pins.Count - 1;
 
-            if(BackBufferDirty)
+            Graphics g = e.Graphics;
+
+            g.FillRectangle(SystemBrushes.Control, 0, 0, 64, waveView.ClientSize.Height);
+            g.FillRectangle(Brushes.Black, 64, 0, waveView.ClientSize.Width, waveView.ClientSize.Height);
+
+            if (Pins.Count <= 0)
+                return;
+
+            if (viewOffset.Value < 0)
+                viewOffset.Value = 0;
+
+            double maxTime;
+            double minTime;
+
+            if(Chip == null)
             {
-                viewOffset.Maximum = Pins.Count - 1;
+                maxTime = TimeScale;
+                minTime = 0;
+            }
+            else if (timeAdjustBar.Value == timeAdjustBar.Maximum)
+            {
+                maxTime = Chip.EmulatorTime;
+                minTime = maxTime - TimeScale;
+            }
+            else
+            {
+                double minimum = Pins[0].MinTime;
 
-                Graphics g = Graphics.FromImage((Image)BackBuffer);
+                for (int i = 1; i < Pins.Count; i++)
+                    if (minimum < Pins[i].MinTime)
+                        minimum = Pins[i].MinTime;
 
-                g.FillRectangle(SystemBrushes.Control, 0, 0, 64, waveView.ClientSize.Height);
-                g.FillRectangle(Brushes.Black, 64, 0, waveView.ClientSize.Width, waveView.ClientSize.Height);
+                double range = (Chip.EmulatorTime - minimum) - TimeScale;  // Only allow it to scale to the minimum time
 
-                if (Pins.Count <= 0)
-                    return;
-
-                if (viewOffset.Value < 0)
-                    viewOffset.Value = 0;
-
-                double maxTime;
-                double minTime;
-
-                if(Chip == null)
+                if (range > 0)
                 {
-                    maxTime = TimeScale;
-                    minTime = 0;
+                    minTime = range * (timeAdjustBar.Value + timeAdjustBar.LargeChange) /
+                              timeAdjustBar.Maximum + minimum;
+                    maxTime = minTime + TimeScale;
                 }
-                else if (timeAdjustBar.Value == timeAdjustBar.Maximum)
+                else
                 {
                     maxTime = Chip.EmulatorTime;
                     minTime = maxTime - TimeScale;
                 }
-                else
-                {
-                    double minimum = Pins[0].MinTime;
-
-                    for (int i = 1; i < Pins.Count; i++)
-                        if (minimum < Pins[i].MinTime)
-                            minimum = Pins[i].MinTime;
-
-                    double range = (Chip.EmulatorTime - minimum) - TimeScale;  // Only allow it to scale to the minimum time
-
-                    if (range > 0)
-                    {
-                        minTime = range * (timeAdjustBar.Value + timeAdjustBar.LargeChange) /
-                                  timeAdjustBar.Maximum + minimum;
-                        maxTime = minTime + TimeScale;
-                    }
-                    else
-                    {
-                        maxTime = Chip.EmulatorTime;
-                        minTime = maxTime - TimeScale;
-                    }
-                }
-
-                // -------------------------------
-
-                // Position of the first marker
-                double markAt = minTime / Marker;
-                // Use the fractional portion as a base offset
-                markAt = (Math.Ceiling(markAt) - markAt) * Marker / TimeScale;
-                // Convert to client space
-                markAt = markAt * (waveView.ClientSize.Width - 64) + 64;
-
-                while (markAt < ClientSize.Width)
-                {
-                    g.DrawLine(Pens.Gray, (float)markAt, 0, (float)markAt, waveView.ClientSize.Height);
-                    markAt += (Marker / TimeScale) * (waveView.ClientSize.Width - 64);
-                }
-
-                for (int i = viewOffset.Value, p = 0;
-                    p < waveView.Height && i < Pins.Count; i++)
-                {
-                    g.DrawString(Pins[i].Name, MonoFont, Brushes.Black, 8, p);
-                    p += Pins[i].Draw(g, p,
-                        64, waveView.ClientSize.Width - 64,
-                        minTime, TimeScale);
-                    g.DrawLine(Pens.Gray, 64, p, waveView.ClientSize.Width, p);
-                }
             }
-            e.Graphics.DrawImageUnscaled(BackBuffer, 0, 0);
+
+            // -------------------------------
+
+            // Position of the first marker
+            double markAt = minTime / Marker;
+            // Use the fractional portion as a base offset
+            markAt = (Math.Ceiling(markAt) - markAt) * Marker / TimeScale;
+            // Convert to client space
+            markAt = markAt * (waveView.ClientSize.Width - 64) + 64;
+
+            while (markAt < ClientSize.Width)
+            {
+                g.DrawLine(Pens.Gray, (float)markAt, 0, (float)markAt, waveView.ClientSize.Height);
+                markAt += (Marker / TimeScale) * (waveView.ClientSize.Width - 64);
+            }
+
+            for (int i = viewOffset.Value, p = 0;
+                p < waveView.Height && i < Pins.Count; i++)
+            {
+                g.DrawString(Pins[i].Name, MonoFont, Brushes.Black, 8, p);
+                p += Pins[i].Draw(g, p,
+                    64, waveView.ClientSize.Width - 64,
+                    minTime, TimeScale);
+                g.DrawLine(Pens.Gray, 64, p, waveView.ClientSize.Width, p);
+            }
         }
 
         /// @brief Update the grid view with the new settings of scale and markers.

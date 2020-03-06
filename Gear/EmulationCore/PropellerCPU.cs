@@ -77,7 +77,7 @@ namespace Gear.EmulationCore
     /// @details Conceptually it comprehends the ROM, RAM (hub memory), clock , locks, hub ring, main 
     /// pin state, and references to each cog (with their own cog memory, counters, frequency 
     /// generator, program cursor).
-    public partial class PropellerCPU : Propeller.DirectMemory
+    public partial class PropellerCPU : Propeller.IDirectMemory
     {
         /// @brief Name of Constants for setting Clock.
         /// 
@@ -100,6 +100,9 @@ namespace Gear.EmulationCore
             "XTAL2+",   // External medium-speed crystal: $00000010 
             "XTAL3+"    // External high-speed crystal:   $00000020
         };
+
+        /// @brief Hub RAM and ROM
+        private byte[] Memory;
 
         /// @brief Array of cogs in the CPU.
         private Cog[] Cogs;
@@ -201,6 +204,73 @@ namespace Gear.EmulationCore
 
             // Put ROM it top part of main RAM.
             Resources.BiosImage.CopyTo(Memory, TOTAL_MEMORY - TOTAL_RAM);
+        }
+
+        public byte this[int offset]
+        {
+            get
+            {
+                if (offset >= Memory.Length)
+                    return 0x55;
+                return Memory[offset];
+            }
+        }
+
+        private int CleanUpAddress(uint address, int size)
+        {
+            return ((int)address & -size) & (TOTAL_RAM - 1);
+        }
+
+        public byte DirectReadByte(uint address)
+        {
+            return Memory[CleanUpAddress(address, 1)];
+        }
+
+        public ushort DirectReadWord(uint address)
+        {
+            var baseAddress = CleanUpAddress(address, 2);
+            return (ushort)(Memory[baseAddress + 0]
+                | ((int)Memory[baseAddress + 1] << 8));
+        }
+
+        public uint DirectReadLong(uint address)
+        {
+            var baseAddress = CleanUpAddress(address, 4);
+            return (uint)Memory[baseAddress + 0]
+                | ((uint)Memory[baseAddress + 1] << 8)
+                | ((uint)Memory[baseAddress + 2] << 16)
+                | ((uint)Memory[baseAddress + 3] << 24);
+        }
+
+        public void DirectWriteByte(uint address, byte value)
+        {
+            var baseAddress = CleanUpAddress(address, 1);
+            if(baseAddress < TOTAL_RAM)
+            {
+                Memory[baseAddress] = value;
+            }
+        }
+
+        public void DirectWriteWord(uint address, ushort value)
+        {
+            var baseAddress = CleanUpAddress(address, 2);
+            if (baseAddress < TOTAL_RAM)
+            {
+                Memory[baseAddress] = (byte)value;
+                Memory[baseAddress + 1] = (byte)(value >> 8);
+            }
+        }
+
+        public void DirectWriteLong(uint address, uint value)
+        {
+            var baseAddress = CleanUpAddress(address, 4);
+            if (baseAddress + 3 < TOTAL_RAM)
+            {
+                Memory[baseAddress] = (byte)value;
+                Memory[baseAddress + 1] = (byte)(value >> 8);
+                Memory[baseAddress + 2] = (byte)(value >> 16);
+                Memory[baseAddress + 3] = (byte)(value >> 24);
+            }
         }
 
         /// @brief Set a breakpoint at this CPU, showing that in the emulator where this runs.
@@ -807,64 +877,6 @@ namespace Gear.EmulationCore
             };
         }
 
-/*
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.ReadByte().
-        /// 
-        public byte ReadByte(uint address)
-        {
-            return Memory[address & 0xFFFF];
-        }
-
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.ReadWord().
-        /// 
-        public ushort ReadWord(uint address)
-        {
-            address &= 0xFFFFFFFE;
-            return (ushort)(Memory[(address++) & 0xFFFF]
-                | (Memory[(address++) & 0xFFFF] << 8));
-        }
-
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.ReadLong().
-        /// 
-        public uint ReadLong(uint address)
-        {
-            address &= 0xFFFFFFFC;
-
-            return (uint)Memory[(address++) & 0xFFFF]
-                | (uint)(Memory[(address++) & 0xFFFF] << 8)
-                | (uint)(Memory[(address++) & 0xFFFF] << 16)
-                | (uint)(Memory[(address++) & 0xFFFF] << 24);
-        }
-
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.WriteByte().
-        /// 
-        public void WriteByte(uint address, uint value)
-        {
-            if ((address & 0x8000) != 0)
-                return;
-            Memory[(address++) & 0x7FFF] = (byte)value;
-        }
-
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.WriteWord().
-        /// 
-        public void WriteWord(uint address, uint value)
-        {
-            address &= 0xFFFFFFFE;
-            WriteByte(address++, (byte)value);
-            WriteByte(address++, (byte)(value >> 8));
-        }
-
-        /// @todo Document method Gear.EmulationCore.PropellerCPU.WriteLong().
-        /// 
-        public void WriteLong(uint address, uint value)
-        {
-            address &= 0xFFFFFFFC;
-            WriteByte(address++, (byte)value);
-            WriteByte(address++, (byte)(value >> 8));
-            WriteByte(address++, (byte)(value >> 16));
-            WriteByte(address++, (byte)(value >> 24));
-        }
-*/
         /// @todo Document method Gear.EmulationCore.PropellerCPU.LockSet().
         /// 
         public uint LockSet(uint number, bool set)

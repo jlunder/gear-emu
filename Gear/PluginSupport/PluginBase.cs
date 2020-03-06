@@ -118,37 +118,21 @@ namespace Gear.PluginSupport
         /// API GEAR described on GEAR original Post</a>
         public virtual void OnPinChange(double time, PinState[] pins) { }
 
+        /// @brief Request a plugin to update its UI when the emulator deems it appropriate
+        public virtual void UpdateGui()
+        {
+            // Call legacy method, for older plugins
+            Repaint(true);
+        }
+
+        [Obsolete]
         /// @brief Event to repaint the plugin screen (if used).
         /// @note Asterisk's: occurs when the GUI has finished executing a emulation 'frame' 
         /// (variable number of clocks). Force is always true (this means that the call wants to 
         /// 'force' an update, this is provided so you can pass a false for non-forced repaints).
         /// @note Source: <a href="http://forums.parallax.com/showthread.php/91084-GEAR-Propeller-Debugging-Environment?p=625629&viewfull=1#post625629">
         /// API GEAR described on GEAR original Post</a>
-        public virtual void UpdateGui()
-        {
-            BackBufferDirty = true;
-            Refresh();
-        }
-
-        protected Bitmap BackBuffer;
-        protected bool BackBufferDirty = true;
-
-        /// @brief Ensures BackBuffer exists with a width and height no less than requested
-        protected void EnsureBackBuffer(int width, int height)
-        {
-            int desiredWidth = width;
-            int desiredHeight = height;
-
-            if (desiredWidth <= 0 || desiredHeight <= 0)
-                desiredWidth = desiredHeight = 1;
-
-            if (BackBuffer == null || BackBuffer.Width != desiredWidth
-                || BackBuffer.Height != desiredHeight)
-            {
-                BackBuffer = new Bitmap(desiredWidth, desiredHeight);
-                BackBufferDirty = true;
-            }
-        }
+        public virtual void Repaint(bool force) { }
 
         /// @brief Notifies that this plugin must be notified on pin changes.
         /// This method is to isolate the access to the underline Chip.

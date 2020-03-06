@@ -38,7 +38,6 @@ namespace Gear.GUI
                 components.Dispose();
             }
             this.MonoFont.Dispose();
-            this.BackBuffer.Dispose();
             base.Dispose(disposing);
         }
 
@@ -51,7 +50,7 @@ namespace Gear.GUI
         private void InitializeComponent()
         {
             this.positionScrollBar = new System.Windows.Forms.VScrollBar();
-            this.memoryPanel = new System.Windows.Forms.Panel();
+            this.memoryPanel = new DoubleBufferedPanel();
             this.SuspendLayout();
             //
             // positionScrollBar
@@ -90,6 +89,6 @@ namespace Gear.GUI
         #endregion
 
         private System.Windows.Forms.VScrollBar positionScrollBar;
-        private System.Windows.Forms.Panel memoryPanel;
+        private DoubleBufferedPanel memoryPanel;
     }
 }

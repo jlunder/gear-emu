@@ -39,7 +39,6 @@ namespace Gear.GUI
             }
             this.MonoFont.Dispose();
             this.MonoFontBold.Dispose();
-            this.BackBuffer.Dispose();
 
             base.Dispose(disposing);
         }
@@ -58,7 +57,7 @@ namespace Gear.GUI
             System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
             System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(CogView));
-            this.assemblyPanel = new System.Windows.Forms.Panel();
+            this.assemblyPanel = new DoubleBufferedPanel();
             this.positionScroll = new System.Windows.Forms.VScrollBar();
             this.toolStrip = new System.Windows.Forms.ToolStrip();
             this.memoryViewButton = new System.Windows.Forms.ToolStripButton();
@@ -282,7 +281,7 @@ namespace Gear.GUI
 
         #endregion
 
-        private System.Windows.Forms.Panel assemblyPanel;
+        private DoubleBufferedPanel assemblyPanel;
         private System.Windows.Forms.VScrollBar positionScroll;
         private System.Windows.Forms.ToolStrip toolStrip;
         private System.Windows.Forms.ToolStripLabel programCounterLabel;

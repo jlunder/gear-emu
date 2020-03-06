@@ -34,15 +34,21 @@ namespace Gear.GUI
 {
     class SpinView : PluginBase
     {
+        private const int bytesPerLine = 16;
+
         private Font MonoSpace;
         private TreeView objectView;
-        private Panel hexView;
+        private DoubleBufferedPanel hexView;
         private ToolStrip toolStrip1;
         private ToolStripButton analyzeButton;
         private VScrollBar scrollPosition;
         private Splitter splitter1;
+
+        private int lineHeight = -1;
         private Brush[] colorBrushes;
-        private byte[] colorMap = new byte[0x10000];
+        private byte[] colorMap = new byte[PropellerCPU.TOTAL_MEMORY];
+        private int highlightStart = 0;
+        private int highlightEnd = 0;
 
         public override string Title
         {
@@ -80,6 +86,9 @@ namespace Gear.GUI
             MonoSpace = new Font(FontFamily.GenericMonospace, 8);
             if (MonoSpace == null)
                 MonoSpace = Font;
+
+            lineHeight = TextRenderer.MeasureText("0000:", MonoSpace).Height;
+
             InitializeComponent();
 
             colorBrushes = new Brush[]
@@ -115,21 +124,21 @@ namespace Gear.GUI
             TreeNode node;
 
             node = root.Nodes.Add(String.Format("System Frequency: {0}mhz", Chip.DirectReadLong(0)));
-            node.Tag = (int)0;
+            node.Tag = Tuple.Create(0, 4);
             node = root.Nodes.Add(String.Format("Clock Mode: {0:X2}", Chip.DirectReadByte(4)));
-            node.Tag = (int)4;
+            node.Tag = Tuple.Create(4, 5);
             node = root.Nodes.Add(String.Format("Check Sum: {0:X2}", Chip.DirectReadByte(5)));
-            node.Tag = (int)5;
+            node.Tag = Tuple.Create(5, 6);
             node = root.Nodes.Add(String.Format("Root Object: {0:X4}", Chip.DirectReadWord(6)));
-            node.Tag = (int)6;
+            node.Tag = Tuple.Create(6, 8);
             node = root.Nodes.Add(String.Format("Variable Base: {0:X4}", Chip.DirectReadWord(8)));
-            node.Tag = (int)8;
+            node.Tag = Tuple.Create(8, 10);
             node = root.Nodes.Add(String.Format("Local Frame: {0:X4}", Chip.DirectReadWord(10)));
-            node.Tag = (int)10;
+            node.Tag = Tuple.Create(10, 12);
             node = root.Nodes.Add(String.Format("Entry PC: {0:X4}", Chip.DirectReadWord(12)));
-            node.Tag = (int)12;
+            node.Tag = Tuple.Create(12, 14);
             node = root.Nodes.Add(String.Format("Starting Stack: {0:X4}", Chip.DirectReadWord(14)));
-            node.Tag = (int)14;
+            node.Tag = Tuple.Create(14, 16);
 
             for (i = 0; i < 16; i++)
                 colorMap[i] = 1;
@@ -143,52 +152,55 @@ namespace Gear.GUI
             ColorObject(Chip.DirectReadWord(0x6), Chip.DirectReadWord(0x8), root);
         }
 
-        private void ColorObject(uint objFrame, uint varFrame, TreeNode root)
+        private void ColorObject(uint objFrame, uint varFrame, TreeNode parent)
         {
             uint i, addr, addrnext;
 
-            root = root.Nodes.Add(String.Format("Object {0:X}", objFrame));
-            root.Tag = (int)objFrame;
+            var objectNode = parent.Nodes.Add(String.Format("Object {0:X}", objFrame));
 
-            root.Nodes.Add(String.Format("Variable Space {0:X4}", varFrame)).Tag = (int)varFrame;
+            objectNode.Nodes.Add(String.Format("Variable Space {0:X4}", varFrame)).Tag =
+                Tuple.Create((int)varFrame, (int)varFrame);
             colorMap[varFrame] = 4;
 
             ushort size = Chip.DirectReadWord(objFrame);
+            uint clippedSize = Math.Min(size, (uint)PropellerCPU.TOTAL_MEMORY - objFrame);
+            objectNode.Tag = Tuple.Create((int)objFrame, (int)(objFrame + clippedSize));
             byte longs = Chip.DirectReadByte(objFrame + 2);
             byte objects = Chip.DirectReadByte(objFrame + 3);
 
-            for (i = 0; i < longs * 4; i++)
+            for (i = 0; i < longs * 4 && i < clippedSize; i++)
                 colorMap[i + objFrame] = 5;
-            for (; i < (longs + objects) * 4; i++)
+            for (; i < (longs + objects) * 4 && i < clippedSize; i++)
                 colorMap[i + objFrame] = 6;
-            for (; i < size; i++)
+            for (; i + 4 < clippedSize; i++)
                 colorMap[i + objFrame] = 7;
 
-            addrnext = Chip.DirectReadWord(1 * 4 + objFrame) + objFrame;
-            for (i = 1; i < longs; i++)
+            addr = Chip.DirectReadWord(objFrame + 4) + objFrame;
+            for (i = 1; i < longs - 1; i++)
             {
+                addrnext = Chip.DirectReadWord(objFrame + 4 + i * 4) + objFrame;
+                ColorFunction(addr, addrnext, objectNode);
                 addr = addrnext;
-                addrnext = Chip.DirectReadWord((i + 1) * 4 + objFrame) + objFrame;
-                if (i == longs - 1)
-                {
-                    addrnext = addr + 1;
-                    while (colorMap[addrnext] == 7)
-                        addrnext++;
-                }
-                ColorFunction(addr, addrnext, root);
+            }
+            if (longs > 0)
+            {
+                ColorFunction(addr, objFrame + clippedSize, objectNode);
             }
 
             for (i = 0; i < objects; i++)
                 ColorObject(Chip.DirectReadWord((longs + i) * 4 + objFrame) + objFrame,
-                    Chip.DirectReadWord((longs + i) * 4 + 2 + objFrame) + varFrame, root);
+                    Chip.DirectReadWord((longs + i) * 4 + 2 + objFrame) + varFrame, objectNode);
         }
 
-        private void ColorFunction(uint functFrame, uint functFrameEnd, TreeNode root)
+        private void ColorFunction(uint functFrame, uint functFrameEnd, TreeNode parent)
         {
-            root = root.Nodes.Add(String.Format("Function {0:X} ({1:d})", functFrame, functFrameEnd - functFrame));
-            root.Tag = (int)functFrame;
+            var functionNode = parent.Nodes.Add(String.Format("Function {0:X} ({1:d})", functFrame, functFrameEnd - functFrame));
+            functionNode.Tag = Tuple.Create((int)functFrame, (int)functFrameEnd);
 
-            colorMap[functFrame] = 8;
+            for(uint i = functFrame; i < functFrameEnd; ++i)
+            {
+                colorMap[i] = 8;
+            }
         }
 
         #region FormCode
@@ -197,7 +209,7 @@ namespace Gear.GUI
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SpinView));
             this.objectView = new System.Windows.Forms.TreeView();
-            this.hexView = new System.Windows.Forms.Panel();
+            this.hexView = new DoubleBufferedPanel();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.analyzeButton = new System.Windows.Forms.ToolStripButton();
             this.scrollPosition = new System.Windows.Forms.VScrollBar();
@@ -218,6 +230,7 @@ namespace Gear.GUI
             // hexView
             //
             this.hexView.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.hexView.Padding = new System.Windows.Forms.Padding(4, 0, 0, 0);
             this.hexView.Location = new System.Drawing.Point(193, 25);
             this.hexView.Name = "hexView";
             this.hexView.Size = new System.Drawing.Size(415, 424);
@@ -249,9 +262,10 @@ namespace Gear.GUI
             // scrollPosition
             //
             this.scrollPosition.Dock = System.Windows.Forms.DockStyle.Right;
+            this.scrollPosition.SmallChange = 3;
             this.scrollPosition.LargeChange = 16;
             this.scrollPosition.Location = new System.Drawing.Point(608, 25);
-            this.scrollPosition.Maximum = 65535;
+            this.scrollPosition.Maximum = 0;
             this.scrollPosition.Name = "scrollPosition";
             this.scrollPosition.Size = new System.Drawing.Size(17, 424);
             this.scrollPosition.TabIndex = 0;
@@ -286,57 +300,131 @@ namespace Gear.GUI
 
         private void OnPaint(object sender, PaintEventArgs e)
         {
-            EnsureBackBuffer(hexView.Width, hexView.Height);
+            Graphics g = e.Graphics;
+            ASCIIEncoding ascii = new ASCIIEncoding();
 
-            if (BackBufferDirty)
+            g.Clear(SystemColors.Control);
+
+            var addrSize = TextRenderer.MeasureText("0000:", MonoSpace);
+            var addrWidth = addrSize.Width;
+            lineHeight = addrSize.Height;
+            var byteWidth = TextRenderer.MeasureText("00", MonoSpace).Width;
+
+            int lineBase = Math.Max(scrollPosition.Value, 0) * bytesPerLine;
+            var clientRect = hexView.ClientRectangle;
+            int yPos = clientRect.Top;
+            while (lineBase < PropellerCPU.TOTAL_MEMORY && yPos < clientRect.Height)
             {
-                Graphics g = Graphics.FromImage((Image)BackBuffer);
-                ASCIIEncoding ascii = new ASCIIEncoding();
-
-                g.Clear(SystemColors.Control);
-
-                Size s = TextRenderer.MeasureText("00", MonoSpace);
-                Size a = TextRenderer.MeasureText("0000:", MonoSpace);
-
-                for (int y = scrollPosition.Value, dy = 0; y < 0x10000 && dy < hexView.ClientRectangle.Height; dy += s.Height)
+                int xPos = clientRect.Left;
+                // Draw the address
+                g.FillRectangle(Brushes.White, new Rectangle(xPos, yPos, addrWidth, lineHeight));
+                g.DrawString(String.Format("{0:X4}:", lineBase), MonoSpace, SystemBrushes.ControlText, xPos, yPos);
+                xPos += addrWidth;
+                // Draw the line of data
+                for (int addr = lineBase; (addr < lineBase + bytesPerLine) && (addr < PropellerCPU.TOTAL_MEMORY); ++addr)
                 {
-                    // Draw the address
-                    g.FillRectangle(Brushes.White, new Rectangle(0, dy, a.Width, s.Height));
-                    g.DrawString(String.Format("{0:X4}:", y), MonoSpace, SystemBrushes.ControlText, 0, dy);
-                    // Draw the line of data
-                    for (int x = 0, dx = a.Width; y < 0x10000 && x < 16; x++, dx += s.Width, y++)
-                    {
-                        byte data = Chip?.DirectReadByte((uint)y) ?? 0x00;
-                        g.FillRectangle(colorBrushes[colorMap[y]], new Rectangle(dx, dy, s.Width, s.Height));
+                    string dataString = (Chip != null
+                        ? Chip.DirectReadByte((uint)(addr)).ToString("X2")
+                        : "--");
 
-                        // if (data > 32 && data < 127)
-                        // {
-                        //    g.DrawString(ascii.GetString(new byte[] { data }), MonoSpace, SystemBrushes.ControlText, dx, dy);
-                        // }
-                        // else
-                        // {
-                        g.DrawString(String.Format("{0:X2}", data), MonoSpace, SystemBrushes.ControlText, dx, dy);
-                        // }
+                    Brush brush;
+                    if(addr >= highlightStart && addr < highlightEnd)
+                    {
+                        brush = Brushes.Magenta;
                     }
+                    else
+                    {
+                        brush = colorBrushes[colorMap[addr]];
+                    }
+
+                    g.FillRectangle(brush, new Rectangle(xPos, yPos, byteWidth, lineHeight));
+
+                    // if (data > 32 && data < 127)
+                    // {
+                    //    g.DrawString(ascii.GetString(new byte[] { data }), MonoSpace, SystemBrushes.ControlText, dx, dy);
+                    // }
+                    // else
+                    // {
+                    g.DrawString(dataString, MonoSpace, SystemBrushes.ControlText, xPos, yPos);
+                    // }
+                    xPos += byteWidth;
                 }
 
-                hexView.CreateGraphics().DrawImageUnscaled(BackBuffer, 0, 0);
-
-                BackBufferDirty = false;
+                yPos += lineHeight;
+                lineBase += bytesPerLine;
             }
+        }
 
-            e.Graphics.DrawImageUnscaled(BackBuffer, 0, 0);
+        public override void UpdateGui()
+        {
+            var totalLines = (PropellerCPU.TOTAL_MEMORY + bytesPerLine - 1) / bytesPerLine;
+            var linesPerPage = hexView.ClientRectangle.Height / lineHeight;
+            var largeChange = Math.Max(linesPerPage - 3, 1);
+            scrollPosition.LargeChange = linesPerPage;
+            scrollPosition.SmallChange = Math.Min(3, largeChange);
+            scrollPosition.Maximum = totalLines;
+
+            hexView.Invalidate();
         }
 
         private void SelectChanged(object sender, TreeViewEventArgs e)
         {
-            object o = objectView.SelectedNode.Tag;
+            var highlight = objectView.SelectedNode.Tag as Tuple<int, int>;
 
-            if (o != null)
+            if (highlight == null)
             {
-                scrollPosition.Value = (int)o;
-                UpdateGui();
+                highlightStart = 0;
+                highlightEnd = 0;
             }
+            else
+            {
+                var linesPerPage = hexView.Height / lineHeight;
+
+                var pageStart = scrollPosition.Value;
+                var pageEnd = pageStart + linesPerPage;
+                highlightStart = highlight.Item1;
+                highlightEnd = highlight.Item2;
+                var highlightStartLine = highlightStart / bytesPerLine;
+                var highlightEndLine = (highlightEnd + bytesPerLine - 1) / bytesPerLine;
+
+                // s e
+                // 1 1 s
+                // 1 2 e
+                // 1 3 -
+                // 2 1 ?
+                // 2 2 -
+                // 2 3 s
+                // 3 1 ?
+                // 3 2 ?
+                // 3 3 s
+
+                // Is the newly highlighted area offscreen?
+                if (((highlightStartLine <= pageStart) && (highlightEndLine >= pageEnd))
+                    || ((highlightStartLine >= pageStart) && (highlightEndLine <= pageEnd)))
+                {
+                    // Do nothing, already scrolled to the right place
+                }
+                else if((highlightStartLine > pageEnd) || (highlightEndLine < pageStart))
+                {
+                    scrollPosition.Value = highlightStartLine;
+                }
+                else
+                {
+                    var optionA = highlightStartLine;
+                    var optionB = highlightEndLine - (linesPerPage - 1);
+
+                    if (Math.Abs(scrollPosition.Value - optionA) <= Math.Abs(scrollPosition.Value - optionB))
+                    {
+                        scrollPosition.Value = optionA;
+                    }
+                    else
+                    {
+                        scrollPosition.Value = optionB;
+                    }
+                }
+            }
+
+            UpdateGui();
         }
 
         private void analyzeButton_Click(object sender, EventArgs e)
